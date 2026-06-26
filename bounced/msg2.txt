@@ -1,0 +1,10 @@
+This is the mail system at host inbound5a.ore.mailhop.org.
+
+I'm sorry to have to inform you that your message could not
+be delivered to one or more recipients. It's attached below.
+
+<stricklandr@citrus.k12.fl.us> failed: host
+ citrus-k12-fl-us.mail.protection.outlook.com (52.101.9.20) said: 550 5.4.1
+ Recipient address rejected: Access denied. For more information see
+ https://aka.ms/EXOSmtpErrors [BL02EPF00021F6F.namprd02.prod.outlook.com
+ 2026-06-19T13:38:30.833Z 08DECD9F9E37AE73] (in reply to RCPT command)

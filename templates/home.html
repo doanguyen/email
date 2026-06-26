@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — Email Marketing{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-md-5">
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Google Accounts</h5>
+                <a href="{% url 'account-add' %}" class="btn btn-primary btn-sm">+ Add Account</a>
+            </div>
+            <div class="card-body p-0">
+                {% if accounts %}
+                    <ul class="list-group list-group-flush">
+                        {% for account in accounts %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="fw-semibold">{{ account.email }}</span>
+                                    {% if account.is_broken %}
+                                        <span class="badge bg-danger ms-2">Broken</span>
+                                    {% else %}
+                                        <span class="badge bg-success ms-2">Active</span>
+                                    {% endif %}
+                                </div>
+                                <a href="{% url 'campaign-create' %}?account={{ account.pk }}"
+                                   class="btn btn-outline-primary btn-sm">
+                                    Send Campaign
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-muted p-3 mb-0">
+                        No accounts yet. <a href="{% url 'account-add' %}">Add a Google account</a> to get started.
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-7">
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Campaigns</h5>
+                <a href="{% url 'campaign-create' %}" class="btn btn-primary btn-sm">+ New Campaign</a>
+            </div>
+            <div class="card-body p-0">
+                {% if campaigns %}
+                    <ul class="list-group list-group-flush">
+                        {% for campaign in campaigns %}
+                            <li class="list-group-item">
+                                <a href="{% url 'campaign-detail' pk=campaign.pk %}"
+                                   class="text-decoration-none text-dark d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <div class="fw-semibold">{{ campaign.name }}</div>
+                                        <small class="text-muted">
+                                            {{ campaign.account.email }} &bull;
+                                            {{ campaign.sent_count }}/{{ campaign.total_contacts }} sent
+                                            {% if campaign.failed_count %}
+                                                &bull; <span class="text-danger">{{ campaign.failed_count }} failed</span>
+                                            {% endif %}
+                                            &bull; {{ campaign.created_at|date:"M d, Y" }}
+                                        </small>
+                                    </div>
+                                    <span class="badge bg-{% if campaign.status == 'completed' %}success{% elif campaign.status == 'running' %}warning text-dark{% elif campaign.status == 'failed' %}danger{% else %}secondary{% endif %} ms-2 flex-shrink-0">
+                                        {{ campaign.get_status_display }}
+                                    </span>
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-muted p-3 mb-0">No campaigns yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

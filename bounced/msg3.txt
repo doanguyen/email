@@ -1,0 +1,4 @@
+Delivery has failed to these recipients or groups:
+
+marcia@smifoundation.org
+Your message is too large to send. To send it, make the message smaller, for example, by removing attachments.
