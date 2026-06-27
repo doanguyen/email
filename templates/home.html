@@ -56,11 +56,8 @@
                                         <div class="fw-semibold">{{ campaign.name }}</div>
                                         <small class="text-muted">
                                             {{ campaign.account.email }} &bull;
-                                            {{ campaign.sent_count }}/{{ campaign.total_contacts }} sent
-                                            {% if campaign.failed_count %}
-                                                &bull; <span class="text-danger">{{ campaign.failed_count }} failed</span>
-                                            {% endif %}
-                                            &bull; {{ campaign.created_at|date:"M d, Y" }}
+                                            {{ campaign.total_contacts }} contacts &bull;
+                                            {{ campaign.created_at|date:"M d, Y" }}
                                         </small>
                                     </div>
                                     <span class="badge bg-{% if campaign.status == 'completed' %}success{% elif campaign.status == 'running' %}warning text-dark{% elif campaign.status == 'failed' %}danger{% else %}secondary{% endif %} ms-2 flex-shrink-0">

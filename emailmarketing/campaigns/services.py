@@ -13,7 +13,7 @@ from django.utils import timezone
 from jinja2 import Environment, TemplateSyntaxError, meta
 
 from emailmarketing.accounts.models import GoogleAccount
-from emailmarketing.campaigns.models import Campaign, Contact
+from emailmarketing.campaigns.models import Blacklist, Campaign, Contact, ContactSend, Touch
 
 ALLOWED_TEMPLATE_VARS = {"first_name"}
 
@@ -46,13 +46,15 @@ def campaign_parse_contacts(csv_file: IO) -> list[dict]:
     if not {"email", "name"}.issubset(fieldnames):
         raise ValidationError("CSV must have 'email' and 'name' columns.")
 
+    seen = set()
     contacts = []
     for row in reader:
         email = row.get("email", "").strip()
         name = row.get("name", "").strip()
 
-        if not email:
+        if not email or email in seen:
             continue
+        seen.add(email)
 
         first_name = name.split()[0] if name else email.split("@")[0]
 
@@ -76,17 +78,21 @@ def campaign_parse_contacts(csv_file: IO) -> list[dict]:
 def campaign_create(
     *,
     name: str,
-    subject: str,
     label: str,
+    subject: str,
     body_template: str,
     account: GoogleAccount,
     contacts_data: list[dict],
 ) -> Campaign:
+    emails = [c["email"] for c in contacts_data]
+    existing = Contact.objects.filter(account=account, email__in=emails).values_list("email", flat=True)
+    if existing:
+        raise ValidationError(
+            f"The following emails are already used by this account: {', '.join(sorted(existing))}."
+        )
+
     campaign = Campaign(
         name=name,
-        subject=subject,
-        label=label,
-        body_template=body_template,
         account=account,
         status=Campaign.Status.PENDING,
         total_contacts=len(contacts_data),
@@ -94,10 +100,11 @@ def campaign_create(
     campaign.full_clean()
     campaign.save()
 
-    Contact.objects.bulk_create(
+    contacts = Contact.objects.bulk_create(
         [
             Contact(
                 campaign=campaign,
+                account=account,
                 email=c["email"],
                 first_name=c["first_name"],
                 attributes=c["attributes"],
@@ -106,15 +113,76 @@ def campaign_create(
         ]
     )
 
-    transaction.on_commit(lambda: _queue_campaign_send(campaign.id))
+    touch = Touch(
+        campaign=campaign,
+        order=1,
+        label=label,
+        subject=subject,
+        body_template=body_template,
+        status=Touch.Status.PENDING,
+        total_contacts=len(contacts),
+    )
+    touch.full_clean()
+    touch.save()
+
+    ContactSend.objects.bulk_create(
+        [ContactSend(touch=touch, contact=c) for c in contacts]
+    )
+
+    transaction.on_commit(lambda: _queue_touch_send(touch.id))
 
     return campaign
+
+
+@transaction.atomic
+def touch_create(*, campaign: Campaign, label: str, subject: str, body_template: str) -> Touch:
+    last_touch = campaign.touches.order_by("-order").first()
+    if last_touch is None:
+        raise ValidationError("Campaign has no touches.")
+    if last_touch.status != Touch.Status.COMPLETED:
+        raise ValidationError("The previous touch must be completed before adding a new one.")
+
+    sent_contact_ids = ContactSend.objects.filter(
+        touch=last_touch,
+        status=ContactSend.Status.SENT,
+    ).values_list("contact_id", flat=True)
+
+    if not sent_contact_ids:
+        raise ValidationError("No contacts were successfully sent in the previous touch.")
+
+    touch = Touch(
+        campaign=campaign,
+        order=last_touch.order + 1,
+        label=label,
+        subject=subject,
+        body_template=body_template,
+        status=Touch.Status.PENDING,
+        total_contacts=len(sent_contact_ids),
+    )
+    touch.full_clean()
+    touch.save()
+
+    sent_contacts = Contact.objects.filter(id__in=sent_contact_ids)
+    ContactSend.objects.bulk_create(
+        [ContactSend(touch=touch, contact=c) for c in sent_contacts]
+    )
+
+    transaction.on_commit(lambda: _queue_touch_send(touch.id))
+
+    return touch
 
 
 def campaign_mark_failed(*, campaign: Campaign) -> Campaign:
     campaign.status = Campaign.Status.FAILED
     campaign.save(update_fields=["status", "updated_at"])
     return campaign
+
+
+def touch_mark_failed(*, touch: Touch) -> Touch:
+    touch.status = Touch.Status.FAILED
+    touch.save(update_fields=["status", "updated_at"])
+    campaign_mark_failed(campaign=touch.campaign)
+    return touch
 
 
 def campaign_get_or_create_label(*, gmail_service, label_name: str) -> str:
@@ -136,15 +204,17 @@ def campaign_get_or_create_label(*, gmail_service, label_name: str) -> str:
 
 def email_send(
     *,
-    contact: Contact,
+    contact_send: ContactSend,
     gmail_service,
     label_id: str,
-    subject: str,
-    body_template: str,
     sender_email: str,
-) -> Contact:
-    rendered_subject = _jinja_env.from_string(subject).render(first_name=contact.first_name)
-    rendered_body = _jinja_env.from_string(body_template).render(first_name=contact.first_name)
+    thread_id: str | None = None,
+) -> ContactSend:
+    contact = contact_send.contact
+    touch = contact_send.touch
+
+    rendered_subject = _jinja_env.from_string(touch.subject).render(first_name=contact.first_name)
+    rendered_body = _jinja_env.from_string(touch.body_template).render(first_name=contact.first_name)
 
     message = MIMEMultipart("alternative")
     message["Subject"] = rendered_subject
@@ -154,10 +224,11 @@ def email_send(
 
     raw = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
 
-    sent = gmail_service.users().messages().send(
-        userId="me",
-        body={"raw": raw},
-    ).execute()
+    body = {"raw": raw}
+    if thread_id:
+        body["threadId"] = thread_id
+
+    sent = gmail_service.users().messages().send(userId="me", body=body).execute()
 
     gmail_service.users().messages().modify(
         userId="me",
@@ -165,14 +236,25 @@ def email_send(
         body={"addLabelIds": [label_id]},
     ).execute()
 
-    contact.status = Contact.Status.SENT
-    contact.sent_at = timezone.now()
-    contact.save(update_fields=["status", "sent_at", "updated_at"])
+    contact_send.status = ContactSend.Status.SENT
+    contact_send.sent_at = timezone.now()
+    contact_send.gmail_message_id = sent["id"]
+    contact_send.gmail_thread_id = sent.get("threadId", "")
+    contact_send.save(update_fields=["status", "sent_at", "gmail_message_id", "gmail_thread_id", "updated_at"])
 
-    return contact
+    return contact_send
 
 
-def _queue_campaign_send(campaign_id: int) -> None:
-    from emailmarketing.campaigns.tasks import campaign_send
+def blacklist_add(*, email: str, reason: str = "") -> Blacklist:
+    entry, _ = Blacklist.objects.get_or_create(email=email.strip().lower(), defaults={"reason": reason})
+    return entry
 
-    campaign_send.delay(campaign_id)
+
+def blacklist_remove(*, email: str) -> None:
+    Blacklist.objects.filter(email=email.strip().lower()).delete()
+
+
+def _queue_touch_send(touch_id: int) -> None:
+    from emailmarketing.campaigns.tasks import touch_send
+
+    touch_send.delay(touch_id)

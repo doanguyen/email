@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Blacklist — Email Marketing{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4>Blacklist</h4>
+    <a href="{% url 'home' %}" class="btn btn-outline-secondary btn-sm">← Back</a>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-5">
+        <div class="card shadow-sm">
+            <div class="card-header"><h6 class="mb-0">Add to Blacklist</h6></div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="add">
+                    <div class="mb-3">
+                        <label for="email" class="form-label fw-semibold">Email *</label>
+                        <input type="email" name="email" id="email" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="reason" class="form-label fw-semibold">Reason</label>
+                        <input type="text" name="reason" id="reason" class="form-control"
+                               placeholder="Optional — e.g. unsubscribed, bounced">
+                    </div>
+                    <button type="submit" class="btn btn-danger">Add to Blacklist</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-7">
+        <div class="card shadow-sm">
+            <div class="card-header"><h6 class="mb-0">Blacklisted Emails ({{ entries|length }})</h6></div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Email</th>
+                            <th>Reason</th>
+                            <th>Added</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in entries %}
+                            <tr>
+                                <td>{{ entry.email }}</td>
+                                <td><small class="text-muted">{{ entry.reason|default:"—" }}</small></td>
+                                <td class="text-nowrap small">{{ entry.created_at|date:"M d, Y" }}</td>
+                                <td>
+                                    <form method="post" class="d-inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="remove">
+                                        <input type="hidden" name="email" value="{{ entry.email }}">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm"
+                                                onclick="return confirm('Remove {{ entry.email }} from blacklist?')">
+                                            Remove
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-muted text-center py-3">No blacklisted emails.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

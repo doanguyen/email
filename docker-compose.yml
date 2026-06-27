@@ -1,0 +1,68 @@
+services:
+  db:
+    image: postgres:16-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: emailmarketing
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-STATUS", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2
+    volumes:
+      - static_files:/app/staticfiles
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_SETTINGS_MODULE: config.django.base
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-in-production}
+      DJANGO_DEBUG: "False"
+      DJANGO_ALLOWED_HOSTS: outreach-email.bkplussoft.com,localhost,127.0.0.1
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/emailmarketing
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      GOOGLE_OAUTH_REDIRECT_URI: https://outreach-email.bkplussoft.com/accounts/oauth/callback/
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery:
+    build: .
+    command: celery -A emailmarketing worker -l info
+    environment:
+      DJANGO_SETTINGS_MODULE: config.django.base
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-in-production}
+      DJANGO_DEBUG: "False"
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/emailmarketing
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      GOOGLE_OAUTH_REDIRECT_URI: https://outreach-email.bkplussoft.com/accounts/oauth/callback/
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_files:

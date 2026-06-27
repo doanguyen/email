@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Create Campaign — Email Marketing{% endblock %}
+{% block title %}Add Touch {{ next_order }} — {{ campaign.name }}{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-lg-8">
         <div class="card shadow-sm">
             <div class="card-header">
-                <h5 class="mb-0">Create Campaign <small class="text-muted fw-normal fs-6">— Touch 1</small></h5>
+                <h5 class="mb-0">Add Touch {{ next_order }} — <span class="text-muted fw-normal">{{ campaign.name }}</span></h5>
             </div>
             <div class="card-body">
                 {% if errors %}
@@ -18,33 +18,14 @@
                     </div>
                 {% endif %}
 
-                <form method="post" enctype="multipart/form-data">
+                <form method="post">
                     {% csrf_token %}
-
-                    <div class="mb-3">
-                        <label for="account_id" class="form-label fw-semibold">Google Account *</label>
-                        <select name="account_id" id="account_id" class="form-select" required>
-                            <option value="">Select account…</option>
-                            {% for account in accounts %}
-                                <option value="{{ account.pk }}"
-                                    {% if selected_account.pk == account.pk or form_data.account_id == account.pk|stringformat:"s" %}selected{% endif %}>
-                                    {{ account.email }}{% if account.is_broken %} (broken){% endif %}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="name" class="form-label fw-semibold">Campaign Name *</label>
-                        <input type="text" name="name" id="name" class="form-control"
-                               value="{{ form_data.name|default:'' }}" required>
-                    </div>
 
                     <div class="mb-3">
                         <label for="label" class="form-label fw-semibold">Gmail Label *</label>
                         <input type="text" name="label" id="label" class="form-control"
                                value="{{ form_data.label|default:'' }}"
-                               placeholder="e.g. Campaign-Q1-2024" required>
+                               placeholder="e.g. Campaign-Q1-2024-FU" required>
                         <div class="form-text">All sent emails will be tagged with this label in Gmail.</div>
                     </div>
 
@@ -52,7 +33,7 @@
                         <label for="subject" class="form-label fw-semibold">Subject *</label>
                         <input type="text" name="subject" id="subject" class="form-control"
                                value="{{ form_data.subject|default:'' }}"
-                               placeholder="Hello !" required>
+                               placeholder="Following up, !" required>
                         <div class="form-text">
                             Jinja2 template. Only <code>{% verbatim %}{{ first_name }}{% endverbatim %}</code> is supported.
                         </div>
@@ -64,21 +45,13 @@
                                   rows="12" required>{{ form_data.body_template|default:'' }}</textarea>
                         <div class="form-text">
                             Jinja2 template. Only <code>{% verbatim %}{{ first_name }}{% endverbatim %}</code> is supported.
-                        </div>
-                    </div>
-
-                    <div class="mb-4">
-                        <label for="contacts" class="form-label fw-semibold">Contacts CSV *</label>
-                        <input type="file" name="contacts" id="contacts" class="form-control" accept=".csv" required>
-                        <div class="form-text">
-                            CSV must have <code>email</code> and <code>name</code> columns.
-                            Optionally an <code>attributes</code> JSON column.
+                            This will be sent as a reply in the same Gmail thread as Touch {{ next_order|add:"-1" }}.
                         </div>
                     </div>
 
                     <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary">Create &amp; Send</button>
-                        <a href="{% url 'home' %}" class="btn btn-outline-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Create &amp; Send Touch {{ next_order }}</button>
+                        <a href="{% url 'campaign-detail' pk=campaign.pk %}" class="btn btn-outline-secondary">Cancel</a>
                     </div>
                 </form>
             </div>

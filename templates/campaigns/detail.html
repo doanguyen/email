@@ -8,59 +8,93 @@
     <a href="{% url 'home' %}" class="btn btn-outline-secondary btn-sm">← Back</a>
 </div>
 
-<div class="row g-3 mb-4">
-    <div class="col-md-5">
-        <div class="card shadow-sm h-100">
-            <div class="card-header"><h6 class="mb-0">Details</h6></div>
-            <div class="card-body">
-                <dl class="row mb-0 small">
-                    <dt class="col-5">Account</dt>
-                    <dd class="col-7">{{ campaign.account.email }}</dd>
-                    <dt class="col-5">Label</dt>
-                    <dd class="col-7"><code>{{ campaign.label }}</code></dd>
-                    <dt class="col-5">Subject</dt>
-                    <dd class="col-7">{{ campaign.subject }}</dd>
-                    <dt class="col-5">Created</dt>
-                    <dd class="col-7">{{ campaign.created_at|date:"M d, Y H:i" }}</dd>
-                    <dt class="col-5">Status</dt>
-                    <dd class="col-7">
-                        <span id="status-badge" class="badge bg-{% if campaign.status == 'completed' %}success{% elif campaign.status == 'running' %}warning text-dark{% elif campaign.status == 'failed' %}danger{% else %}secondary{% endif %}">
-                            {{ campaign.get_status_display }}
-                        </span>
-                    </dd>
-                </dl>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-md-7">
-        <div class="card shadow-sm h-100">
-            <div class="card-header"><h6 class="mb-0">Progress</h6></div>
-            <div class="card-body d-flex flex-column justify-content-center">
-                <div class="d-flex justify-content-between mb-2 small">
-                    <span>Sent: <strong id="sent-count">{{ campaign.sent_count }}</strong></span>
-                    <span>Failed: <strong id="failed-count" class="text-danger">{{ campaign.failed_count }}</strong></span>
-                    <span>Total: <strong>{{ campaign.total_contacts }}</strong></span>
-                </div>
-                {% if campaign.total_contacts > 0 %}
-                    <div class="progress" style="height: 20px;">
-                        <div id="progress-bar"
-                             class="progress-bar progress-bar-striped{% if campaign.status == 'running' %} progress-bar-animated{% endif %}"
-                             role="progressbar"
-                             style="width: {% widthratio campaign.sent_count campaign.total_contacts 100 %}%">
-                            {% widthratio campaign.sent_count campaign.total_contacts 100 %}%
-                        </div>
-                    </div>
-                {% endif %}
-            </div>
-        </div>
+<div class="card shadow-sm mb-4">
+    <div class="card-header"><h6 class="mb-0">Campaign Info</h6></div>
+    <div class="card-body">
+        <dl class="row mb-0 small">
+            <dt class="col-4 col-md-2">Account</dt>
+            <dd class="col-8 col-md-10">{{ campaign.account.email }}</dd>
+            <dt class="col-4 col-md-2">Total Contacts</dt>
+            <dd class="col-8 col-md-10">{{ campaign.total_contacts }}</dd>
+            <dt class="col-4 col-md-2">Created</dt>
+            <dd class="col-8 col-md-10">{{ campaign.created_at|date:"M d, Y H:i" }}</dd>
+            <dt class="col-4 col-md-2">Status</dt>
+            <dd class="col-8 col-md-10">
+                <span id="campaign-status-badge" class="badge bg-{% if campaign.status == 'completed' %}success{% elif campaign.status == 'running' %}warning text-dark{% elif campaign.status == 'failed' %}danger{% else %}secondary{% endif %}">
+                    {{ campaign.get_status_display }}
+                </span>
+            </dd>
+        </dl>
     </div>
 </div>
 
-<div class="card shadow-sm">
-    <div class="card-header">
-        <h6 class="mb-0">Contacts ({{ contacts|length }})</h6>
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="mb-0">Touches</h5>
+    {% if can_add_touch %}
+        <a href="{% url 'touch-create' campaign_pk=campaign.pk %}" class="btn btn-primary btn-sm">+ Add Touch</a>
+    {% elif latest_touch and latest_touch.status != 'completed' %}
+        <span class="text-muted small">Available when current touch completes</span>
+    {% endif %}
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>#</th>
+                    <th>Label</th>
+                    <th>Subject</th>
+                    <th>Status</th>
+                    <th>Sent</th>
+                    <th>Failed</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+            <tbody id="touches-tbody">
+                {% for touch in touches %}
+                    <tr id="touch-row-{{ touch.id }}">
+                        <td>{{ touch.order }}</td>
+                        <td><code>{{ touch.label }}</code></td>
+                        <td class="text-truncate" style="max-width:200px;">{{ touch.subject }}</td>
+                        <td>
+                            <span class="badge bg-{% if touch.status == 'completed' %}success{% elif touch.status == 'running' %}warning text-dark{% elif touch.status == 'failed' %}danger{% else %}secondary{% endif %}"
+                                  id="touch-status-{{ touch.id }}">
+                                {{ touch.get_status_display }}
+                            </span>
+                        </td>
+                        <td id="touch-sent-{{ touch.id }}">{{ touch.sent_count }}</td>
+                        <td id="touch-failed-{{ touch.id }}" class="text-danger">{{ touch.failed_count }}</td>
+                        <td>{{ touch.total_contacts }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="7" class="text-muted text-center py-3">No touches yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
+</div>
+
+{% if latest_touch %}
+<h5>
+    Touch {{ latest_touch.order }} — Contact Sends
+    {% if latest_touch.total_contacts > 0 %}
+        <small class="text-muted fw-normal fs-6">({{ latest_touch.sent_count }}/{{ latest_touch.total_contacts }})</small>
+    {% endif %}
+</h5>
+<div class="card shadow-sm">
+    {% if latest_touch.total_contacts > 0 %}
+        <div class="px-3 pt-3">
+            <div class="progress mb-3" style="height:16px;">
+                <div id="progress-bar"
+                     class="progress-bar progress-bar-striped{% if latest_touch.status == 'running' %} progress-bar-animated{% endif %}"
+                     role="progressbar"
+                     style="width: {% widthratio latest_touch.sent_count latest_touch.total_contacts 100 %}%">
+                    {% widthratio latest_touch.sent_count latest_touch.total_contacts 100 %}%
+                </div>
+            </div>
+        </div>
+    {% endif %}
     <div class="table-responsive">
         <table class="table table-sm table-hover mb-0">
             <thead class="table-light">
@@ -73,30 +107,32 @@
                 </tr>
             </thead>
             <tbody>
-                {% for contact in contacts %}
+                {% for cs in contact_sends %}
                     <tr>
-                        <td>{{ contact.email }}</td>
-                        <td>{{ contact.first_name }}</td>
+                        <td>{{ cs.contact.email }}</td>
+                        <td>{{ cs.contact.first_name }}</td>
                         <td>
-                            <span class="badge bg-{% if contact.status == 'sent' %}success{% elif contact.status == 'failed' %}danger{% elif contact.status == 'bounced' %}warning{% else %}secondary{% endif %}">
-                                {{ contact.get_status_display }}
+                            <span class="badge bg-{% if cs.status == 'sent' %}success{% elif cs.status == 'failed' %}danger{% elif cs.status == 'skipped' %}warning text-dark{% else %}secondary{% endif %}">
+                                {{ cs.get_status_display }}
                             </span>
                         </td>
-                        <td class="text-nowrap small">{{ contact.sent_at|date:"H:i:s"|default:"—" }}</td>
-                        <td><small class="text-danger">{{ contact.error_message }}</small></td>
+                        <td class="text-nowrap small">{{ cs.sent_at|date:"H:i:s"|default:"—" }}</td>
+                        <td><small class="text-danger">{{ cs.error_message }}</small></td>
                     </tr>
+                {% empty %}
+                    <tr><td colspan="5" class="text-muted text-center py-3">No contact sends yet.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
 {% if campaign.status == 'pending' or campaign.status == 'running' %}
 <script>
 const statusUrl = "{% url 'campaign-status' pk=campaign.pk %}";
-const total = {{ campaign.total_contacts }};
 const statusColors = {
     completed: 'success',
     running: 'warning text-dark',
@@ -108,22 +144,41 @@ function updateStatus() {
     fetch(statusUrl)
         .then(r => r.json())
         .then(data => {
-            document.getElementById('sent-count').textContent = data.sent_count;
-            document.getElementById('failed-count').textContent = data.failed_count;
+            const badge = document.getElementById('campaign-status-badge');
+            if (badge) {
+                badge.textContent = data.campaign_status.charAt(0).toUpperCase() + data.campaign_status.slice(1);
+                badge.className = 'badge bg-' + (statusColors[data.campaign_status] || 'secondary');
+            }
 
-            const pct = total > 0 ? Math.round(data.sent_count / total * 100) : 0;
-            const bar = document.getElementById('progress-bar');
-            bar.style.width = pct + '%';
-            bar.textContent = pct + '%';
+            data.touches.forEach(t => {
+                const statusEl = document.getElementById('touch-status-' + t.id);
+                const sentEl = document.getElementById('touch-sent-' + t.id);
+                const failedEl = document.getElementById('touch-failed-' + t.id);
+                if (statusEl) {
+                    statusEl.textContent = t.status.charAt(0).toUpperCase() + t.status.slice(1);
+                    statusEl.className = 'badge bg-' + (statusColors[t.status] || 'secondary');
+                }
+                if (sentEl) sentEl.textContent = t.sent_count;
+                if (failedEl) failedEl.textContent = t.failed_count;
+            });
 
-            const badge = document.getElementById('status-badge');
-            badge.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
-            badge.className = 'badge bg-' + (statusColors[data.status] || 'secondary');
+            const lastTouch = data.touches[data.touches.length - 1];
+            if (lastTouch) {
+                const bar = document.getElementById('progress-bar');
+                if (bar && lastTouch.total_contacts > 0) {
+                    const pct = Math.round(lastTouch.sent_count / lastTouch.total_contacts * 100);
+                    bar.style.width = pct + '%';
+                    bar.textContent = pct + '%';
+                    if (lastTouch.status !== 'running') {
+                        bar.classList.remove('progress-bar-animated');
+                    }
+                }
+            }
 
-            if (data.status === 'running' || data.status === 'pending') {
+            if (data.campaign_status === 'running' || data.campaign_status === 'pending') {
                 setTimeout(updateStatus, 3000);
-            } else if (data.status === 'completed') {
-                bar.classList.remove('progress-bar-animated');
+            } else if (data.campaign_status === 'completed') {
+                setTimeout(() => location.reload(), 1000);
             }
         })
         .catch(() => setTimeout(updateStatus, 5000));
